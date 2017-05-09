@@ -1,0 +1,207 @@
+---
+title: "FFChallenge"
+author: "Hui Liang"
+date: "5/1/2017"
+output: pdf_document
+---
+
+```{r read files}
+setwd('/Users/Phoebe/Documents/FFChallenge')
+background <- read.csv('subset.csv', header=TRUE, na.strings=c("NA", "Other"))
+background_df <- data.frame(background)
+
+# remove the two columns with all empty values
+background_df <- background_df[, !names(background_df) %in% c("hv5_intyr", "p5_intyr")]
+
+pred <- read.csv('prediction.csv', header=TRUE)
+pred_df <- data.frame(pred)
+pred_grit <- pred_df[,c("challengeID", "grit")]
+train <- read.csv('grit.csv', header=TRUE)
+train_df <- data.frame(train)
+```
+
+# The different types of missing values
+# -9 Not in wave
+# -6 Skip
+# -3 Missing
+# -2 Not observed / Don't know
+
+# columns with only -9 and -3 values
+# hv5_ppvtpr: PPVT percentile rank
+# hv5_dspr: Digit Span percentile rank
+# hv5_ppvtae: PPVT age equivalency
+# hv5_wj10ae- Woodcock Johnson Test 10 age equivalency
+# hv5_wj9ae
+# hv5_wj10pr - Woodcock Johnson Test 10 percentile rank
+# hv5_wj9pr
+# f5f14b - Reason the welfare office stopped or cut off your cash aid     
+# f5j5d - Who controls the money in this household
+# p5l5b     
+# m5a6f03 - Who biological child in A6B is currently living with       
+# m5d7 - What current partner was doing most of last week    
+# m5f14b - Reason the welfare office stopped or cut off your cash aid
+# f5a6f02 - Who biological child in A6B is currently living with   
+# f5a6f03     
+# f5e1b - Country or territory where father's mother was born   
+# f5b10x - Main reason mother doesn't see child more often    
+# f5i7 - Reason father are not looking for a regular job
+# f5a4c - Cause of mother's death
+# f5b23x - What mother was doing most of last week - working, school, something else
+
+```{r data processing}
+
+# check the number of missing values in each column
+colSums(is.na(df)) 
+
+# Check how many columns contain the NA values
+ii <- sort(colSums(is.na(background_df)), decreasing = TRUE)[1:20]
+
+# Check how many columns contain has only -9 and -3 values
+i <- sort(colSums(background_df == -9|background_df == -3), decreasing = TRUE)[1:277]
+
+background_df <- background_df[, !names(background_df) %in% names(i)] # remove columns w only -9 & -3 values
+background_df <- background_df[, !names(background_df) %in% names(ii)] # remove columns w/ NA values
+
+```
+
+#Summary of ridge, lasso, and elnet:
+# > min(cv.out$cvm)
+# [1] 0.2297163
+# > min(cv.out2$cvm)
+# [1] 0.2257993
+# > min(cv.out3$cvm)
+# [1] 0.2282524
+
+# Regression tree:
+# tree(formula = grit ~ ., data = merge[, -1])
+# Variables actually used in tree construction:
+#  [1] "m5a8f01"   "p5l17d"    "m5b2a"     "m5a5c02"   "p5q3bq"    "hv5_mwtlb" "p5l12_107"
+#  [8] "k5g1b"     "f5j6e"     "m5b3b"     "f5i24d"    "p5i5"     
+# Number of terminal nodes:  13 
+# Residual mean deviance:  0.1993 = 280.1 / 1405 
+# Distribution of residuals:
+#     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+# -2.18900 -0.32540  0.06111  0.00000  0.42460  1.12500 
+
+```{r model}
+library(glmnet)
+
+# inner join
+merge <- merge(train_df, background_df)
+
+# find the column index of "grit"
+idx <- which(names(merge)=="grit") 
+
+x = model.matrix(merge$grit~., merge[,-1])[,-1]
+y = merge$grit
+
+test <- merge(pred_grit, background_df)
+x_test <- model.matrix(test$grit~., test[,-1])[,-1]
+
+# OLS: can't use OLS because p > n
+# PCA: can't use PCA because most are categorical variable.
+
+# use ridge regression
+
+grid=10^seq(10,-2,length=100)
+ridge.mod = glmnet(x, y, alpha=0, lambda = grid)
+# dim(coef(ridge.mod))
+
+cv.out = cv.glmnet(x,y,alpha=0)
+bestlam = cv.out$lambda.min
+print (bestlam)
+
+# training error
+ridge.train=predict(ridge.mod, s=bestlam, newx = x)
+mean((ridge.train-y)^2)
+# result: 0.1998373
+
+ridge.pred=predict(ridge.mod, s=bestlam, newx=x_test)
+
+ridge.coef=predict(ridge.mod,type="coefficients",s=bestlam)
+ridge.coef
+ridge.coef[1:10,]
+
+bestlamda: 3.649494
+
+# use lasso regression
+
+grid = grid=10^seq(10,-2,length=100)
+lasso.mod = glmnet(x, y, alpha=1, lambda = grid)
+
+cv.out2 = cv.glmnet(x,y,alpha=1)
+bestlam2 = cv.out2$lambda.min
+print(bestlam2)
+
+# training error
+lasso.train=predict(lasso.mod, s=bestlam2, newx = x)
+mean((lasso.train-y)^2)
+# result: 0.201025
+
+lasso.pred=predict(lasso.mod, s=bestlam2, newx = x_test)
+
+lasso.coef=predict(lasso.mod,type="coefficients",s=bestlam2)
+lasso.coef
+
+bestlambda: 0.01774604
+
+# k5conf2-CONF2. Child has seen his/her biofather in the last year
+# k5conf2-Child's biomother has a husband or partner in the house
+
+# random forest
+
+library(randomForest)
+set.seed(1)
+rf.mod = randomForest(grit~., data=merge[,-1], importance=TRUE)
+rf.pred = predict(rf.mod, test[,-1][,-1])
+
+importance(rf.mod)
+varImpPlot(rf.mod)
+
+#The former is based upon the mean decrease of accuracy in predictions on the out of bag samples when a given variable is excluded from the model. The latter is a measure of the total decrease in node impurity that results from splits over that variable, averaged over all trees
+
+rf.train = predict(rf.mod, merge[,-1][,-1])
+mean((rf.train-y)^2)
+# result: 0.03447324
+
+# extract the top important features
+test <- data.frame(importance(rf.mod))
+vars <- row.names(test)
+test[order(-test$X.IncMSE),][1:20,]
+
+# elastic net
+library(MASS)
+library(glmnet)
+grid = grid=10^seq(10,-2,length=100)
+elnet.mod <- glmnet(x, y, alpha=.5, lambda = grid)
+
+cv.out3 = cv.glmnet(x,y,alpha=.5)
+bestlam3 = cv.out3$lambda.min
+print(bestlam3)
+
+elnet.train=predict(elnet.mod, s=bestlam3, newx = x)
+mean((elnet.train-y)^2)
+# result: 0.2186541
+
+elnet.pred=predict(elnet.mod, s=bestlam3, newx = x_test)
+#bestlambda: 0.05394479
+
+elnet.coef=predict(elnet.mod,type="coefficients",s=bestlam3)
+elnet.coef
+
+# Regression Trees
+set.seed(1)
+library(MASS)
+library(tree)
+tree = tree(grit~., data=merge[,-1])
+
+plot(tree)
+text(tree, pretty=0)
+
+tree.train = predict(tree, merge[,-1][,-1])
+mean((tree.train-y)^2)
+# result: 0.1975075
+
+tree.pred = predict(tree, test[,-1][,-1])
+
+```
