@@ -1,0 +1,40 @@
+---
+title: "materialHardship"
+author: "Adaeze Ajoku"
+date: "5/26/2017"
+output: html_document
+---
+
+# Step 0- Prepare for data analysis
+
+## Load in libraries
+```{r}
+library(readr)
+library(randomForest)
+library(mice)
+library(dplyr)
+```
+
+## Load in data
+```{r}
+background <- read_csv("~/Desktop/Fragile Families/background.csv")
+train <- read_csv("~/Desktop/Fragile Families/train.csv")
+```
+
+# Approach 1~ Select what I believe are important variables
+
+## Year 0
+```{r}
+year0 <- c('m1a4', 'm1a11a', 'm1a11b', 'm1a11c', 'm1a11d', 'm1a13', 'm1a15', 'cm1age', 'cm11bw', 'm1b6a', 'm1b9b3', 'm1b10a3', 'm1b12a', 'm1b20', 'cm1cohf', 'm1d1c', 'm1e4a', 'm1f3', 'm1f4', 'cm1edu', 'm1j1b', 'm1j1e', 'm1j2a', 'm1j2b', 'm1j3', 'f1a6', 'f1a6a', 'f1b6a', 'f1b9b3', 'f1b10b3', 'f1d1e', 'f1e3', 'f1e7a', 'f1f3', 'f1f4', 'f1f8', 'cf1edu', 'f1k1a', 'f1k1c')
+```
+
+## Year 1
+```{r}
+
+```
+
+## Year 3
+## Year 5
+## Year 9
+
+# Approach 2~ Dimension reduction
