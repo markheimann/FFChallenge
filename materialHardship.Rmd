@@ -13,28 +13,67 @@ library(readr)
 library(randomForest)
 library(mice)
 library(dplyr)
+library(glmnet)
 ```
 
 ## Load in data
 ```{r}
-background <- read_csv("~/Desktop/Fragile Families/background.csv")
-train <- read_csv("~/Desktop/Fragile Families/train.csv")
+background <- read.csv("~/Desktop/Fragile Families/background.csv", header=T)
+train <- read.csv("~/Desktop/Fragile Families/train.csv", header=T)
+background.tr <- semi_join(background, train)
 ```
 
 # Approach 1~ Select what I believe are important variables
 
 ## Year 0
 ```{r}
-year0 <- c('m1a4', 'm1a11a', 'm1a11b', 'm1a11c', 'm1a11d', 'm1a13', 'm1a15', 'cm1age', 'cm11bw', 'm1b6a', 'm1b9b3', 'm1b10a3', 'm1b12a', 'm1b20', 'cm1cohf', 'm1d1c', 'm1e4a', 'm1f3', 'm1f4', 'cm1edu', 'm1j1b', 'm1j1e', 'm1j2a', 'm1j2b', 'm1j3', 'f1a6', 'f1a6a', 'f1b6a', 'f1b9b3', 'f1b10b3', 'f1d1e', 'f1e3', 'f1e7a', 'f1f3', 'f1f4', 'f1f8', 'cf1edu', 'f1k1a', 'f1k1c')
+year0 <- c('m1a4', 'm1a11a', 'm1a11b', 'm1a11c', 'm1a11d', 'm1a13', 'm1a15', 'cm1age', 'cm11bw', 'm1b6a', 'm1b9b3', 'm1b10a3', 'm1b12a', 'm1b20', 'cm1cohf', 'm1d1c', 'm1e4a', 'm1f3', 'm1f4', 'cm1edu', 'm1j1b', 'm1j1e', 'm1j2a', 'm1j2b', 'm1j3', 'cm1adult', 'cm1kids', 'f1a6', 'f1a6a', 'f1b6a', 'f1b9b3', 'f1b10b3', 'f1d1e', 'f1e3', 'f1e7a', 'f1f3', 'f1f4', 'f1f8', 'cf1edu', 'f1k1a', 'f1k1c', 'cf1adult', 'cf1kids')
 ```
 
 ## Year 1
 ```{r}
-
+year1 <- c()
 ```
 
 ## Year 3
 ## Year 5
 ## Year 9
 
+## Final Dataset
+```{r}
+fin <- background[,c('challengeID', year0)]
+```
 # Approach 2~ Dimension reduction
+
+## LASSO
+```{r}
+# LASSO cannot handle missing values
+
+# (a) What if I only use the rows with complete cases (ie no NAs)?
+btr.all <- data.frame(background.tr, materialHardship = train$materialHardship)
+btr.cc <- complete.cases(btr.all) #all False
+#There aren't any rows without at least one NA. So this won't work.
+
+# (b) How about doing multiple imputation?
+
+## Including the response variable in the imputation procedure
+btr.mi <- mice(btr.all, method='norm')
+
+## Doing separate imputation on background and on the response variable
+
+## Doing separate imputation on background and using the mean for the NA values in the response
+
+## Using the mean for NA values in background and the response variable
+
+Can be either a single string, or a vector of strings with length ncol(data),
+specifying the elementary imputation method to be used for each column in
+data. If specified as a single string, the same method will be used for all columns.
+The default imputation method (when no argument is specified) depends on the
+measurement level of the target column and are specified by the defaultMethod
+argument. Columns that need not be imputed have the empty method ''. See
+details for more information.
+
+lasso.fit <- glmnet(as.matrix(background.tr),train$materialHardship, family='gaussian', alpha = 1) 
+```
+
+## Principal Component Regression
