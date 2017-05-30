@@ -46,18 +46,98 @@ fin <- background[,c('challengeID', year0)]
 # Approach 2~ Dimension reduction
 
 ## LASSO
-```{r}
-# LASSO cannot handle missing values
+Turns out LASSO cannot handle missing (NA) values.
 
+Missing Data Interpretation:
+-9 *Not in wave* – Did not participate in survey/data collection component
+-8 Out of range – Response not possible; rarely used
+-7 Not applicable (also -10/-14) – Rarely used for survey questions
+-6 *Valid skip* – Intentionally not asked question; question does not apply to respondent or response known based on prior information.
+-5 Not asked “Invalid skip” – Respondent not asked question in the version of the survey they received.
+-3 Missing – Data is missing due to some other reason; rarely used
+-2 *Don’t know* – Respondent asked question; Responded “Don’t Know”.
+-1 *Refuse* – Respondent asked question; Refused to answer question
+```{r complete cases}
 # (a) What if I only use the rows with complete cases (ie no NAs)?
 btr.all <- data.frame(background.tr, materialHardship = train$materialHardship)
 btr.cc <- complete.cases(btr.all) #all False
 #There aren't any rows without at least one NA. So this won't work.
+```
 
+```{r multiple imputation prep}
 # (b) How about doing multiple imputation?
 
-## Including the response variable in the imputation procedure
-btr.mi <- mice(btr.all, method='norm')
+## (i) Set negative values to NA
+negs <- c(-1, -2, -3, -5, -6, -7, -8, -9, -10, -14)
+neg2NA <- function(x){
+  ifelse(x %in% negs, NA, x)
+}
+
+background.tr <- as.data.frame(sapply(background.tr, function(x) neg2NA(x)))
+
+## (ii) Some columns are entirely NA or more than 50% NA. These rows I'd like to eliminate from consideration.
+table(background.tr$m1lenhr, useNA='ifany') #for example
+
+miss_pat <- md.pattern(background.tr) 
+#There doesn't seem to be any pattern to the missing data
+
+#I cannot use aggr() in the VIM package because there are too many variables to graphically represent the missing data pattern
+
+miss_pairs <- md.pairs(background.tr) #takes too long to compute
+
+na_percent <- function(x){
+  sum(is.na(x))/nrow(background.tr)*100
+}
+
+background.tr_na <- background.tr[,which(sapply(background.tr, function(x) na_percent(x)) > 50)]
+
+background.tr_cl <- background.tr[,!(names(background.tr) %in% names(background.tr_na))]
+
+# Now that I have a more manageable dataset I can look towards multiple imputation. However I must specify a mice method for each column. 
+
+## (ii) For the columns with no missing values, I will set the imputation method to "". If it is a numeric I will use method "norm", if is a 2-level factor I will use method "logreg", and if it is a 2+ level factor I will use "polyreg". 
+
+background.tr_cl.na <- background.tr_cl[,which(sapply(background.tr_cl, function(x) sum(is.na(x))) != 0)]
+
+#temp <- background.tr_cl.na[,!(names(background.tr_cl.na) %in% norm1 | names(background.tr_cl.na) %in% logreg1 | names(background.tr_cl.na) %in% polyreg1)]
+temp2 <- background.tr_cl.na[,!(names(background.tr_cl.na) %in% names(temp))]
+
+
+for(i in names(temp2)){
+  if(i %in% polyreg1){
+    print(i)
+  }
+}
+```
+
+```{r assigning method type}
+# norm for numeric types
+norm1 <- c("m1citywt", "m1e1d8", "m1citywt_rep1", "m1citywt_rep2", "m1citywt_rep3", "m1citywt_rep4",  "m1citywt_rep5", "m1citywt_rep6", "m1citywt_rep7", "m1citywt_rep8", "m1citywt_rep9", "m1citywt_rep10", "f1citywt", "f1j15a", "f1citywt_rep1", "f1citywt_rep2", "f1citywt_rep3", "f1citywt_rep4", "f1citywt_rep5", "f1citywt_rep6", "f1citywt_rep7", "f1citywt_rep8", "f1citywt_rep9", "f1citywt_rep10", "m2citywt", "m2citywt_rep1", "m2citywt_rep2", "m2citywt_rep3", "m2citywt_rep4", "m2citywt_rep5", "m2citywt_rep6", "m2citywt_rep7", "m2citywt_rep8", "m2citywt_rep9", "m2citywt_rep10", "f2citywt", "f2citywt_rep1", "f2citywt_rep2", "f2citywt_rep3", "f2citywt_rep4", "f2citywt_rep5", "f2citywt_rep6", "f2citywt_rep7", "f2citywt_rep8", "f2citywt_rep9", "f2citywt_rep10", "m3citywt", "m3citywt_rep1", "m3citywt_rep2", "m3citywt_rep3", "m3citywt_rep4", "m3citywt_rep5", "m3citywt_rep6", "m3citywt_rep7", "m3citywt_rep8", "m3citywt_rep9", "m3citywt_rep10", "f3citywt", "f3citywt_rep1", "f3citywt_rep2", "f3citywt_rep3", "f3citywt_rep4", "f3citywt_rep5", "f3citywt_rep6", "f3citywt_rep7", "f3citywt_rep8", "f3citywt_rep9", "f3citywt_rep10", "m4citywt", "m4citywt_rep1", "m4citywt_rep2", "m4citywt_rep3", "m4citywt_rep4", "m4citywt_rep5", "m4citywt_rep6", "m4citywt_rep7", "m4citywt_rep8", "m4citywt_rep9", "m4citywt_rep10", "m2c37a4", "m2g5b_a1", "f2fh23a", "f2k15a", "f4k18", "f4k26c", "f4l6b", "f4l9b", "m4j13a", "hv4a12", "hv4a14",  "hv4b1", "hv4b2", "hv4b3", "hv4b4", "hv4b5", "hv4b23", "hv4b24",  "hv4e3", "hv4e4", "hv4e5", "hv4food_exp", "hv4accdt")
+
+# logreg for 2 factors
+logreg1 <-  c("cm1finjail", "cmf1finjail", "cf1natsm", "cf1citsm", "cf1finjail", "cm2natsm", "cm2natsmx", "cm2citsm", "cm2finjail", "cm2fevjail", "cf2natsm", "cf2natsmx", "cf2citsm", "cf2finjail", "cmf2finjail", "cf2fevjail", "cmf2fevjail", "cc4natsm", "cc4natsmx", "cc4citsm", "cmf4finjail", "cmf4fevjail", "f4l6", "cc2natsm", "cc2natsmx", "cc2citsm", "cm3natsm", "cm3natsmx", "cm3citsm", "cm3finjail", "cm3fevjail", "m3l9", "cf3natsm", "cf3natsmx", "cf3citsm", "cf3finjail", "cmf3finjail", "cf3fevjail", "cmf3fevjail", "cc3natsm", "cc3natsmx", "cc3citsm", 'cm4natsm', "cm4natsmx", "cm4citsm", "cm4finjail", "cm4fevjail", "m4k18", "m4k24c", "m4k26c", "m4l9b", "hv4a7", "hv4a9", "hv4a16", "hv4a20", "hv4a22", "hv4a29", "hv4b7", "hv4b9",  "hv4b11", "hv4b15", "hv4b17", "hv4b18", "hv4c2", "hv4c3", "hv4c5", "hv4c6", "hv4c9", "hv4c13", "hv4c14", "hv4d2", "hv4g15", "hv4g20", "hv4j1", "hv4sex_child", "hv4k0a",  "hv4k1", "hv4k3", "hv4k9")  
+
+# polyreg for 2+ factors 
+polyreg1 <- c("m1b9b11", "m1b10a11", "m1f7", "m1h3", "m1i11", "f1b9a11", "f1b10b11", "f1f7",  "m2a7c",  "m2b15a8", "m2b30g", "m2b31cp", "m2b32p", "m2c14", "m2c20p", "m2c27cp", "m2d3b7", "m2f2d3", "m2f2d4", "m2g8a", "m2k6b", "m2l9", "f2a4a", "f2b14a8", "f2b22", "f2fc19bp", "f2fc19c5", "f2g5b", "f2h12a6", "f2j4b6", "f2k3k", "m5a6f03", "m5d7", "m5f14b", "f5a4c", "f5a6f02", "f5a6f03", "f5b10x", "f5e1b", "f5f14b", "f5i7", "f5j5d", "p5l5b", "hv5_dspr", "f4a10h1", "f4c10a1", "f4c15a_4", "f4c21d_9", "f4c36", "f4c37a_8", "f4h1b", "f4i2", "f4j2a_8", "f4l5d", "f2k23f1d", "m3b3f", "m3c15a_4", "m3c38d_9", "f3b15_7", "f3c38c_9", "f3c41", "f3i2",  "m4a3i", "m4c10a2", "m4c21d_9", "m4c36", "m4f3a1_5", "m4f3a2_9", "m4h1b", "m4i14b", "m4i20b", "m4j2a_8", "m4j2b1_9", "m4l5c", "m4l5d", "hv4a1", "hv4a6", "hv4a8", "hv4a11", "hv4a21d1_ot", "hv4a21d2_ot", "hv4a21d3_ot", "hv4a27", "hv4a30", "hv4b8", "hv4b14", "hv4b14_6ot", "hv4b14_7ot", "hv4c1a", "hv4c1b", "hv4c1c", "hv4c1d", "hv4c1e", "hv4c1f",  "hv4c1g", "hv4c1h", "hv4c7", "hv4c8", "hv4c15", "hv4c16a", "hv4c16b", "hv4c16c", "hv4c17a", "hv4c17b", "hv4c17c", "hv4d1a", "hv4d1b", "hv4d1c", "hv4d1d", "hv4d1e", "hv4d14",  "hv4d15a", "hv4d15b",  "hv4d15c", "hv4d15d", "hv4d15e", "hv4d15f",  "hv4d15g",  "hv4d15h", "hv4d15i", "hv4d16", "hv4d17", "hv4d17_ot", "hv4e5_ot", "hv4f1a", "hv4f1b", "hv4f1c", "hv4f1d", "hv4f1e", "hv4f1f", "hv4f1g", "hv4f1h", "hv4f1j", "hv4f1k", "hv4f1l", "hv4f2a1", "hv4f2a1_ot1",  "hv4f2a1_ot2", "hv4f2b1", "hv4f2b1_ot1", "hv4f2b1_ot2", "hv4f3a",  "hv4f3b", "hv4f3c", "hv4f3d", "hv4f3e", "hv4g1", "hv4g2", "hv4g3", "hv4g4", "hv4g5", "hv4g6", "hv4g7", "hv4g8", "hv4g9", "hv4g10", "hv4g11", "hv4g12", "hv4g13", "hv4g14", "hv4g16", "hv4g17", "hv4g18", "hv4g19", "hv4g20_ot", "hv4g22_ot", "hv4h1", "hv4h2", "hv4h3", "hv4h4", "hv4h5", "hv4h6", "hv4h7", "hv4j5a_ot", "hv4j7_ot",  "hv4j11_ot", "hv4v8_ot", "hv4v9", "hv4v9_ot", "hv4k4per_ot", "hv4k5per_ot", "hv4k6", "hv4k6_ot", "hv4k7", "hv4k8", "hv4k8_ot", "hv4k10a_ot1", "hv4k10a_ot2", "hv4k11a_ot1", "hv4k11a_ot2", "hv4k12a_ot1", "hv4k13a_ot1",  "hv4k14a_ot1", "hv4k14a_ot2", "hv4l1", "hv4l2", "hv4l3", "hv4l4",  "hv4l5", "hv4l6", "hv4l7", "hv4l8", "hv4l9", "hv4l10", "hv4l11", "hv4l12", "hv4l14", "hv4l15", "hv4l16", "hv4l17", "hv4l18", "hv4l19", "hv4l20", "hv4l21", "hv4l22", "hv4l23", "hv4l24", "hv4l25", "hv4l26", "hv4l27", "hv4l28", "hv4l29", "hv4l30", "hv4l31",  "hv4l32", 'hv4l33', "hv4l34", "hv4l35", "hv4l36", "hv4l37", "hv4l38", "hv4l39", "hv4l40",  "hv4l41",  "hv4l42",  "hv4l43", "hv4l44", "hv4l45", "hv4l46", "hv4l47", "hv4l48", "hv4l49", "hv4l50", "hv4l51",  "hv4l52", "hv4l53", "hv4l54", "hv4l55", "hv4l56", "hv4l57", "hv4l58", "hv4l59", "hv4l60", "hv4l61", "hv4l62", "hv4l63", "hv4l64",  "hv4l65", "hv4l66", "hv4p6_ot", "hv4p8_ot1", "hv4r10a_ot2", "hv4s1_ot1", "hv4s1_ot2", "hv4s5_ot1_1", "hv4s5_ot1_2", "hv4s5_ot2_1")
+```
+
+```{r}
+m.method <- rep("", length(background.tr_cl))
+
+m.method <- ifelse(names(background.tr_cl) %in% norm1, "norm", ifelse(names(background.tr_cl) %in% logreg1, "logreg", ifelse(names(background.tr_cl) %in% polyreg1, "polyreg", m.method)))
+
+## (iii) In determining the method for the other columns, if a column is a factor, I will make all negative values NA.
+
+
+
+#The imputation process in R takes too long so I will read out my file to a csv and use fancy impute in Python
+write.csv(background.tr_cl, "/Users/adaezeajoku/Desktop/Fragile\ Families/cleaned_background_tr.csv", row.names=F)
+
+
+
+
+## (ii) Including the response variable in the imputation procedure
+btr.mi <- mice(background.tr_cl[-1], method='norm')
 
 ## Doing separate imputation on background and on the response variable
 
